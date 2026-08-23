@@ -1,6 +1,10 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { auth, checkWorkspaceAccess } from '@/lib/auth';
+import { checkWorkspaceAccess } from '@/lib/auth';
+import { authFromRequest } from '@/lib/api-token';
+// `authFromRequest` accepts a session OR an API token and returns the same
+// shape, so every authorisation check below is unchanged — a token acts as the
+// user it is mapped to and gets no more access than they have.
 import { ProjectVisibility } from '@prisma/client';
 import { rateLimit } from '@/lib/rate-limit';
 import { buildBillingAccessWhereInput, isPaidTier } from '@/lib/billing';
@@ -13,7 +17,7 @@ import { eventKey, recordEvent } from '@/lib/analytics/record';
 // GET /api/projects - List all projects for the authenticated user
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
+    const session = await authFromRequest(request);
     const MAX_LIMIT = 100;
     const MAX_PAGE = 1000;
     const MAX_OFFSET = 10000;
@@ -101,7 +105,7 @@ export async function POST(request: NextRequest) {
     const limited = await rateLimit(request, 'create-project');
     if (limited) return limited;
 
-    const session = await auth();
+    const session = await authFromRequest(request);
 
     if (!session?.user?.id) {
       return apiErrors.unauthorized();

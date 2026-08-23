@@ -1,7 +1,11 @@
 import { NextRequest } from 'next/server';
 import { randomUUID } from 'crypto';
 import { db } from '@/lib/db';
-import { auth, checkProjectAccess } from '@/lib/auth';
+import { checkProjectAccess } from '@/lib/auth';
+import { authFromRequest } from '@/lib/api-token';
+// `authFromRequest` accepts a session OR an API token and returns the same
+// shape, so every authorisation check below is unchanged — a token acts as the
+// user it is mapped to and gets no more access than they have.
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
 import { rateLimit } from '@/lib/rate-limit';
 import {
@@ -72,7 +76,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const limited = await rateLimit(request, 'mutate');
     if (limited) return limited;
 
-    const session = await auth();
+    const session = await authFromRequest(request);
     const { projectId } = await params;
 
     if (!session?.user?.id) {
@@ -251,7 +255,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const limited = await rateLimit(request, 'mutate');
     if (limited) return limited;
 
-    const session = await auth();
+    const session = await authFromRequest(request);
     const { projectId } = await params;
 
     if (!session?.user?.id) {

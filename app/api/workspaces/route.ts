@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { auth } from '@/lib/auth';
+import { authFromRequest } from '@/lib/api-token';
 import { rateLimit } from '@/lib/rate-limit';
 import { buildBillingAccessWhereInput, getWorkspaceCreationEligibility } from '@/lib/billing';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
@@ -10,7 +10,7 @@ import { eventKey, recordEvent } from '@/lib/analytics/record';
 // GET /api/workspaces - List all workspaces for the authenticated user
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
+    const session = await authFromRequest(request);
     const MAX_LIMIT = 100;
     const MAX_PAGE = 1000;
     const MAX_OFFSET = 10000;
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     const limited = await rateLimit(request, 'create-workspace');
     if (limited) return limited;
 
-    const session = await auth();
+    const session = await authFromRequest(request);
 
     if (!session?.user?.id) {
       return apiErrors.unauthorized();

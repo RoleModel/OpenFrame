@@ -1,6 +1,10 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { auth, checkProjectAccess } from '@/lib/auth';
+import { checkProjectAccess } from '@/lib/auth';
+import { authFromRequest } from '@/lib/api-token';
+// `authFromRequest` accepts a session OR an API token and returns the same
+// shape, so every authorisation check below is unchanged — a token acts as the
+// user it is mapped to and gets no more access than they have.
 import { validateUrl, validateOptionalUrlOrAppPath } from '@/lib/validation';
 import { rateLimit } from '@/lib/rate-limit';
 import { notifyProjectOwner } from '@/lib/notifications';
@@ -16,7 +20,7 @@ type RouteParams = { params: Promise<{ projectId: string }> };
 // GET /api/projects/[projectId]/videos - List all videos in a project
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const session = await auth();
+    const session = await authFromRequest(request);
     const { projectId } = await params;
 
     // Check project exists and user has access
@@ -68,7 +72,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const limited = await rateLimit(request, 'create-video');
     if (limited) return limited;
 
-    const session = await auth();
+    const session = await authFromRequest(request);
     const { projectId } = await params;
 
     if (!session?.user?.id) {

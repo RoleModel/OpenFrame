@@ -58,3 +58,7 @@ OPTIMIZATIONS.md
 # Claude doesn't respect AGENTS.md and I don't want double AGENTS.md files on the repo.
 CLAUDE.md
 .github/prompts/
+
+# local port/env overrides, not for the fork
+docker-compose.override.yml
+.env.docker

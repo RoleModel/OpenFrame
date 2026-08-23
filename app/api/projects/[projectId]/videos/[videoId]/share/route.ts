@@ -2,7 +2,11 @@ import { randomBytes } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { NextRequest } from 'next/server';
 import { Prisma } from '@prisma/client';
-import { auth, checkProjectAccess } from '@/lib/auth';
+import { checkProjectAccess } from '@/lib/auth';
+import { authFromRequest } from '@/lib/api-token';
+// `authFromRequest` accepts a session OR an API token and returns the same
+// shape, so every authorisation check below is unchanged — a token acts as the
+// user it is mapped to and gets no more access than they have.
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
 import { db } from '@/lib/db';
 import { rateLimit } from '@/lib/rate-limit';
@@ -93,7 +97,7 @@ function serializeShareLink(
 // GET /api/projects/[projectId]/videos/[videoId]/share
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const session = await auth();
+    const session = await authFromRequest(request);
     if (!session?.user?.id) {
       return apiErrors.unauthorized();
     }
@@ -136,7 +140,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const limited = await rateLimit(request, 'mutate');
     if (limited) return limited;
 
-    const session = await auth();
+    const session = await authFromRequest(request);
     if (!session?.user?.id) {
       return apiErrors.unauthorized();
     }
@@ -272,7 +276,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const limited = await rateLimit(request, 'mutate');
     if (limited) return limited;
 
-    const session = await auth();
+    const session = await authFromRequest(request);
     if (!session?.user?.id) {
       return apiErrors.unauthorized();
     }
@@ -351,7 +355,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const limited = await rateLimit(request, 'mutate');
     if (limited) return limited;
 
-    const session = await auth();
+    const session = await authFromRequest(request);
     if (!session?.user?.id) {
       return apiErrors.unauthorized();
     }
