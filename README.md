@@ -1,3 +1,23 @@
+> ### This is RoleModel's fork
+>
+> Forked from [yusufipk/OpenFrame](https://github.com/yusufipk/OpenFrame), which is
+> Fair Source (FSL-1.1-ALv2) — self-hosting for internal use is explicitly
+> permitted, and each release becomes Apache 2.0 two years after publication.
+> Everything below is upstream's README and still true. What we added:
+>
+> - **`OPENFRAME_API_TOKENS`** — token auth for non-browser callers, so a render
+>   pipeline can deliver a video without holding a next-auth session. A token maps
+>   to a user and acts as them, so every authorisation check downstream is
+>   unchanged. See `lib/api-token.ts`.
+>
+> Deliberately not a database table: a token model means a Prisma migration, and
+> this fork would then carry a schema change to rebase against every upstream
+> migration. The whole diff is one new file plus a one-line swap in each of six
+> routes.
+>
+> **Used by:** [`rm-share`](https://github.com/RoleModel/rolemodel-openscreen) and the
+> Studio's Review page.
+
 # OpenFrame
 
 OpenFrame is a fair source video review and approval platform for teams that need clear feedback, version control, and client-friendly review links in one place. It supports collaborative review workflows out of the box and can be self-hosted with the Docker setup included in this repository.
