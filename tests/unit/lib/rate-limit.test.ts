@@ -95,6 +95,73 @@ describe('getClientIp in cloudflare mode', () => {
   });
 });
 
+describe('getClientIp in vercel mode', () => {
+  beforeEach(() => {
+    vi.stubEnv('TRUSTED_PROXY_MODE', 'vercel');
+  });
+
+  it('trusts x-vercel-forwarded-for', () => {
+    const request = requestWith({ 'x-vercel-forwarded-for': '203.0.113.8' });
+    expect(getClientIp(request)).toBe('203.0.113.8');
+  });
+
+  it('prefers x-vercel-forwarded-for over x-forwarded-for', () => {
+    const request = requestWith({
+      'x-vercel-forwarded-for': '203.0.113.8',
+      'x-forwarded-for': '203.0.113.9',
+    });
+    expect(getClientIp(request)).toBe('203.0.113.8');
+  });
+
+  // The opposite end from nginx mode, which is the whole reason this is its own
+  // mode: Vercel's edge prepends the caller, so a spoofed SUFFIX is what gets
+  // ignored here.
+  it('takes the first x-forwarded-for entry so a spoofed suffix is ignored', () => {
+    const request = requestWith({ 'x-forwarded-for': '203.0.113.9, 2.2.2.2, 1.1.1.1' });
+    expect(getClientIp(request)).toBe('203.0.113.9');
+  });
+
+  it('trims whitespace around the first x-forwarded-for entry', () => {
+    expect(getClientIp(requestWith({ 'x-forwarded-for': '   203.0.113.9   , 1.1.1.1' }))).toBe(
+      '203.0.113.9'
+    );
+  });
+
+  it('handles a single-entry x-forwarded-for', () => {
+    expect(getClientIp(requestWith({ 'x-forwarded-for': '203.0.113.9' }))).toBe('203.0.113.9');
+  });
+
+  it('falls back to x-forwarded-for when x-vercel-forwarded-for is implausible', () => {
+    const request = requestWith({
+      'x-vercel-forwarded-for': 'evil<script>',
+      'x-forwarded-for': '203.0.113.9',
+    });
+    expect(getClientIp(request)).toBe('203.0.113.9');
+  });
+
+  it('returns the loopback address when the first x-forwarded-for entry is implausible', () => {
+    expect(getClientIp(requestWith({ 'x-forwarded-for': 'bogus-host, 203.0.113.9' }))).toBe(
+      '127.0.0.1'
+    );
+  });
+
+  it('does not trust the nginx header, which this edge does not set', () => {
+    expect(getClientIp(requestWith({ 'x-real-ip': '203.0.113.8' }))).toBe('127.0.0.1');
+  });
+
+  it('accepts an IPv6 address', () => {
+    const request = requestWith({ 'x-vercel-forwarded-for': '2001:db8::1' });
+    expect(getClientIp(request)).toBe('2001:db8::1');
+  });
+
+  it('normalises a padded and mixed-case mode value', () => {
+    vi.stubEnv('TRUSTED_PROXY_MODE', '  Vercel  ');
+    expect(getClientIp(requestWith({ 'x-vercel-forwarded-for': '203.0.113.8' }))).toBe(
+      '203.0.113.8'
+    );
+  });
+});
+
 describe('getClientIp in nginx mode', () => {
   beforeEach(() => {
     vi.stubEnv('TRUSTED_PROXY_MODE', 'nginx');
