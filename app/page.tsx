@@ -1,5 +1,10 @@
 import { after } from 'next/server';
-import { LandingPage } from '@/components/LandingPage';
+// Ours, not upstream's. LandingPage.tsx is 965 lines of marketing for their
+// hosted product — including a hardcoded pricing section, which with billing off
+// advertised plans nobody can buy. It is left untouched rather than trimmed,
+// because this fork tracks an `upstream` remote and editing it would put a
+// conflict in every pull. Swapping the import is the whole customisation.
+import { RoleModelLanding } from '@/components/RoleModelLanding';
 import { auth } from '@/lib/auth';
 import { readPageVisitor, recordVisitorEvent } from '@/lib/analytics/visitor';
 
@@ -14,5 +19,5 @@ export default async function HomePage() {
     after(() => recordVisitorEvent('LANDING_VIEW', visitor));
   }
 
-  return <LandingPage isLoggedIn={isLoggedIn} />;
+  return <RoleModelLanding isLoggedIn={isLoggedIn} />;
 }
