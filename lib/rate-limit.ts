@@ -41,8 +41,9 @@ if (process.env.NODE_ENV === 'production' && isRateLimitDisabled()) {
 if (process.env.NODE_ENV === 'production' && !process.env.TRUSTED_PROXY_MODE?.trim()) {
   logWarn(
     'TRUSTED_PROXY_MODE is not set. Every request resolves to 127.0.0.1, so rate limits ' +
-      'apply per process rather than per client. Set TRUSTED_PROXY_MODE=cloudflare or ' +
-      'TRUSTED_PROXY_MODE=nginx once you have confirmed your proxy overwrites the ' +
+      'apply per process rather than per client. Set TRUSTED_PROXY_MODE=cloudflare, ' +
+      'TRUSTED_PROXY_MODE=vercel or TRUSTED_PROXY_MODE=nginx once you have confirmed your ' +
+      'proxy overwrites the ' +
       'corresponding header on every inbound request.'
   );
 }
@@ -228,6 +229,13 @@ function isPlausibleIp(value: string): boolean {
  *
  *   TRUSTED_PROXY_MODE=cloudflare  — trust cf-connecting-ip (Cloudflare edge)
  *   TRUSTED_PROXY_MODE=nginx       — trust x-real-ip / x-forwarded-for (Nginx real_ip_header)
+ *   TRUSTED_PROXY_MODE=vercel      — trust x-vercel-forwarded-for (Vercel edge)
+ *
+ * Vercel is its own mode rather than a synonym for nginx because the two read
+ * opposite ends of x-forwarded-for. Nginx's real_ip_header appends the peer, so
+ * the client is the LAST entry; Vercel's edge prepends the client, so it is the
+ * FIRST. Deploying to Vercel with TRUSTED_PROXY_MODE=nginx would therefore key
+ * every limit on a Vercel proxy address, which reads as working and is not.
  *
  * Without TRUSTED_PROXY_MODE set, no proxy headers are trusted: all requests appear
  * as 127.0.0.1, which means rate limits apply per-process rather than per-client IP.
@@ -254,6 +262,21 @@ export function getClientIpFromHeaders(headers: Headers): string {
     const cfIp = headers.get('cf-connecting-ip');
     if (cfIp && isPlausibleIp(cfIp)) {
       return cfIp;
+    }
+  }
+
+  if (mode === 'vercel') {
+    // x-vercel-forwarded-for is injected by Vercel's edge on every inbound request
+    // and cannot be set by a client — an inbound value is overwritten.
+    const vercelIp = headers.get('x-vercel-forwarded-for');
+    if (vercelIp && isPlausibleIp(vercelIp)) return vercelIp;
+
+    // Vercel also prepends the client to x-forwarded-for, so the FIRST entry is the
+    // caller. Note that is the opposite end from the nginx branch below.
+    const forwardedFor = headers.get('x-forwarded-for');
+    if (forwardedFor) {
+      const first = forwardedFor.split(',')[0].trim();
+      if (isPlausibleIp(first)) return first;
     }
   }
 
@@ -288,7 +311,7 @@ export function getClientIpFromHeaders(headers: Headers): string {
  */
 export function isClientIpTrustworthy(): boolean {
   const mode = process.env.TRUSTED_PROXY_MODE?.trim().toLowerCase();
-  return mode === 'cloudflare' || mode === 'nginx';
+  return mode === 'cloudflare' || mode === 'nginx' || mode === 'vercel';
 }
 
 /**
