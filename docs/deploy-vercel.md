@@ -33,6 +33,55 @@ Set the Vercel project's function region to match the database region — a
 cross-region hop shows up on every request. `vercel.json` pins `iad1` (US East);
 change it if the database lives elsewhere.
 
+### The certificate, which will cost you an hour if you skip it
+
+Managed Postgres often presents a chain rooted in the vendor's own CA rather than
+a publicly-trusted one. Supabase serves:
+
+```
+*.pooler.supabase.com  ←  Supabase Intermediate 2021 CA  ←  Supabase Root 2021 CA (self-signed)
+```
+
+Nothing in the system trust store matches that root, and both failures it causes
+are disguised:
+
+- `prisma migrate deploy` reports **`P1001: Can't reach database server`**, which
+  reads as a firewall or a wrong host and is really a rejected certificate.
+- `pg` 8.18 treats a bare `sslmode=require` as _full verification_ (libpq treats
+  it as encrypt-without-verify; node-postgres deliberately differs and warns about
+  it). So the running app fails too, not just the build.
+
+Watch for a false negative while diagnosing this: with `NODE_TLS_REJECT_UNAUTHORIZED=0`
+exported in a shell, the same connection succeeds and looks fine.
+
+The fix is to supply the root, not to disable verification. Download it from the
+project dashboard — Database Settings → SSL Configuration → `prod-ca-2021.crt` —
+and set it as `DATABASE_CA_CERT` (the PEM itself, not a path):
+
+```sh
+vercel env add DATABASE_CA_CERT production --no-sensitive < prod-ca-2021.crt
+```
+
+`lib/db.ts` picks it up and connects with `rejectUnauthorized: true`. `PGSSLROOTCERT`
+takes a path instead, for a normal server or a local run; an env var is used on
+Vercel because a bundled serverless function has no dependable path to read from.
+
+Note that the CA cannot be passed alongside the connection string: pg parses the
+string _over_ the config it is given, so an `ssl` option next to a URL carrying
+`sslmode=` is silently discarded. `lib/db-ssl.ts` splits the URL into fields for
+exactly that reason, and drops `sslmode` on the way through.
+
+The build materialises the same PEM to a temp file, because Prisma wants a path,
+and migrates with `sslmode=verify-full&sslrootcert=…`.
+
+To verify the root is the one you expect:
+
+```sh
+openssl x509 -in prod-ca-2021.crt -noout -subject -fingerprint -sha256
+# subject=CN=Supabase Root 2021 CA, O=Supabase Inc
+# SHA256 Fingerprint=80:70:25:AD:50:D4:ED:21:9D:2C:9C:7D:29:9C:00:4F:82:4E:B0:0C:F7:F6:5A:FE:F6:07:D0:7B:72:E6:CA:FA
+```
+
 ## 2. Bucket
 
 Create an R2 bucket, then an R2 API token with object read/write on it.
@@ -71,6 +120,7 @@ NEXTAUTH_URL=https://your-domain
 NEXTAUTH_SECRET=              # openssl rand -base64 32
 NEXT_PUBLIC_APP_URL=https://your-domain
 TRUSTED_PROXY_MODE=vercel
+DATABASE_CA_CERT=             # the PEM, if the database uses a private CA (see above)
 OPENFRAME_ENABLE_S3_VIDEO_UPLOADS=true
 R2_ACCOUNT_ID=
 R2_ACCESS_KEY_ID=
