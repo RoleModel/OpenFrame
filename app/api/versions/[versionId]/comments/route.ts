@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { auth, computeProjectAccess, projectAccessInclude } from '@/lib/auth';
+import { authFromRequest } from '@/lib/api-token';
 import { rateLimit } from '@/lib/rate-limit';
 import { notifyProjectOwner } from '@/lib/notifications';
 import { apiErrors, successResponse, withCacheControl } from '@/lib/api-response';
@@ -39,7 +40,19 @@ function normalizeEtag(value: string): string {
 // GET /api/versions/[versionId]/comments
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const session = await auth();
+    /*
+     * authFromRequest, not auth(): reading notes has to work for a non-browser caller.
+     *
+     * auth() only ever sees a browser session, so an API token got a flat 403 here and
+     * a tool could create a project, upload a video and mint a share link — all more
+     * privileged than this — while being unable to read one comment back. The token
+     * resolves to a real user and acts as them, so this grants no access that user does
+     * not already have; computeProjectAccess below still decides.
+     *
+     * GET only. Writing a comment as a token is a separate decision and POST still
+     * requires a session.
+     */
+    const session = await authFromRequest(request);
     const { versionId } = await params;
     const userId = session?.user?.id;
 

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { auth, checkProjectAccess } from '@/lib/auth';
+import { authFromRequest } from '@/lib/api-token';
 import { db } from '@/lib/db';
 import { getApprovalCandidatesForProject } from '@/lib/approval-workflow';
 import { notifyUsers } from '@/lib/notifications';
@@ -15,9 +16,12 @@ function isSerializableConflict(error: unknown): boolean {
 }
 
 // GET /api/versions/[versionId]/approvals
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const session = await auth();
+    // Same reason as the comments GET: reading approval state has to work for a
+    // non-browser caller, and the token acts as a real user rather than widening what
+    // that user can see. POST below still requires a session.
+    const session = await authFromRequest(request);
     if (!session?.user?.id) return apiErrors.unauthorized();
 
     const { versionId } = await params;
