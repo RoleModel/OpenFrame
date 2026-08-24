@@ -25,8 +25,24 @@ function warnIfConflictingDirectUploadFlags(): void {
   );
 }
 
+/**
+ * Whether paid-tier behaviour applies at all.
+ *
+ * Defaults to whether billing *could* work rather than to `true`. Defaulting to
+ * true meant a self-hosted instance with no Stripe keys still enforced the trial
+ * limits and still offered to upgrade — one workspace, and an upgrade button that
+ * leads nowhere because there is no price to charge against. That is a dead end
+ * presented as a choice.
+ *
+ * An explicit setting always wins, so a hosted deployment that wants the gates on
+ * before its keys are in place can say so. With keys present the behaviour is
+ * unchanged, which is the case upstream runs in.
+ */
 export function isStripeFeatureEnabled() {
-  return readBooleanEnv('OPENFRAME_ENABLE_STRIPE', true);
+  const explicit = process.env.OPENFRAME_ENABLE_STRIPE?.trim().toLowerCase();
+  if (explicit === 'true') return true;
+  if (explicit === 'false') return false;
+  return hasStripeConfig();
 }
 
 export function hasStripeConfig() {
