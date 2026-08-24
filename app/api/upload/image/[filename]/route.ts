@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
-import { auth, checkProjectAccess } from '@/lib/auth';
+import { checkProjectAccess } from '@/lib/auth';
+import { authFromRequest } from '@/lib/api-token';
 import { db } from '@/lib/db';
 import { validateShareLinkAccess } from '@/lib/share-links';
 import { getShareSessionFromRequest } from '@/lib/share-session';
@@ -68,7 +69,12 @@ export async function GET(
         take: 2,
         select: { video: { select: videoSelect } },
       }),
-      auth(),
+      // authFromRequest, not auth(): a thumbnail has to be fetchable by a
+      // non-browser caller. The access check below is unchanged — the token
+      // resolves to a real user and checkProjectAccess still decides — but without
+      // this an API token got a flat 403 on its own project's thumbnails, so the
+      // Studio's review board could list videos it was not allowed to show.
+      authFromRequest(request),
     ]);
 
     const uniqueVideos = new Map<string, (typeof videoAssets)[number]['video']>();
