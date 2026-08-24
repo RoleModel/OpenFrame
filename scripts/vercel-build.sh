@@ -31,8 +31,24 @@ set -eu
 echo "==> prisma generate"
 bun run db:generate
 
+# Only production touches the schema.
+#
+# The Supabase integration sets the same DATABASE_URL for Production and Preview,
+# so every preview build was doing schema work against the production database —
+# and two builds doing it at once is how this went wrong:
+#
+#   P3018 column "multipart_upload_id" of relation "video_upload_sessions"
+#         already exists
+#
+# One build had `db push` mid-flight while the other ran `migrate deploy` against
+# the half-updated ledger. Neither command is at fault; running them concurrently
+# is. A preview has no business migrating production anyway, so it does not.
+#
+# Point a preview at its own database and set SKIP_DB_BOOTSTRAP=0 to opt back in.
 if [ "${SKIP_DB_BOOTSTRAP:-}" = "1" ]; then
   echo "==> skipping database bootstrap (SKIP_DB_BOOTSTRAP=1)"
+elif [ -n "${VERCEL_ENV:-}" ] && [ "${VERCEL_ENV}" != "production" ] && [ "${SKIP_DB_BOOTSTRAP:-}" != "0" ]; then
+  echo "==> skipping database bootstrap on a ${VERCEL_ENV} build (it shares production's database)"
 else
   # Schema work needs the unpooled connection: `migrate deploy` takes a
   # session-level advisory lock that a transaction-mode pooler will not hold
