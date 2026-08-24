@@ -86,16 +86,27 @@ describe('boolean feature flags', () => {
     (raw) => {
       vi.stubEnv('OPENFRAME_ENABLE_STRIPE', raw);
       vi.stubEnv('OPENFRAME_ENABLE_S3_VIDEO_UPLOADS', raw);
-      // Stripe defaults to on, S3 video uploads default to off.
-      expect(isStripeFeatureEnabled()).toBe(true);
+      // An unrecognised value is not a setting, so each flag falls back to its
+      // own default. S3 video uploads default to off. Stripe now defaults to
+      // whether billing could work at all, and nothing here configures it.
+      expect(isStripeFeatureEnabled()).toBe(false);
       expect(isS3VideoUploadsFeatureEnabled()).toBe(false);
     }
   );
 
-  it('defaults Stripe, Bunny uploads and the invite code to on when unset', () => {
-    expect(isStripeFeatureEnabled()).toBe(true);
+  it('defaults Bunny uploads and the invite code to on when unset', () => {
     expect(isBunnyUploadsFeatureEnabled()).toBe(true);
     expect(isInviteCodeRequired()).toBe(true);
+  });
+
+  /*
+   * Stripe used to default to on regardless of configuration. That made a
+   * self-hosted instance with no keys enforce the trial's one-workspace limit and
+   * offer an upgrade it could not complete. It now follows the config, and
+   * tests/unit/lib/feature-flags-stripe.test.ts covers every branch.
+   */
+  it('defaults Stripe to off when unset and unconfigured', () => {
+    expect(isStripeFeatureEnabled()).toBe(false);
   });
 
   it('defaults S3 video uploads to off when unset', () => {
