@@ -1,58 +1,69 @@
 #!/bin/sh
 # Vercel build for OpenFrame.
 #
-# Three steps: generate the Prisma client, apply migrations, build Next. The
-# Dockerfile does the same generate-then-build; the compose stack applies
-# migrations separately, and on Vercel there is no separate step to hook, so the
-# build is where `migrate deploy` has to happen.
+# generate → bootstrap the database → build Next.
 #
-# `migrate deploy` only ever applies committed migrations — it never generates or
-# resets one — so a build cannot invent a schema change. It is idempotent, which
-# matters because previews and production both run it. Set SKIP_MIGRATIONS=1 to
-# build without touching the database.
+# The database step is scripts/docker-db-bootstrap.ts, not `prisma migrate deploy`.
+# That distinction matters and cost a broken deploy to learn:
+#
+# The migration history is not self-contained. Its earliest entry is
+# `20260226110000_rate_limit_extras`, and `20260227000000_add_audio_asset_kind_and_provider`
+# references a `VideoAssetKind` enum that no migration ever creates. So the
+# migrations are incremental changes on top of a baseline that lives in
+# schema.prisma rather than in prisma/migrations, and `migrate deploy` against an
+# empty database fails partway with
+#
+#   ERROR: type "VideoAssetKind" does not exist   (SQLSTATE 42704)
+#
+# leaving a failed row in _prisma_migrations that blocks every later deploy with
+# P3009 until somebody resolves it by hand.
+#
+# The project already knows all of this. docker-db-bootstrap.ts detects a fresh
+# database, marks any failed migration rolled back, pushes the schema baseline,
+# and then marks every migration applied so future deploys are ordinary
+# `migrate deploy` runs. On a populated database it just migrates, and it refuses
+# to guess if it finds a failure there. Reusing it means Vercel and Docker
+# bootstrap identically instead of drifting.
+#
+# Set SKIP_DB_BOOTSTRAP=1 to build without touching the database.
 set -eu
 
 echo "==> prisma generate"
 bun run db:generate
 
-if [ "${SKIP_MIGRATIONS:-}" = "1" ]; then
-  echo "==> skipping prisma migrate deploy (SKIP_MIGRATIONS=1)"
+if [ "${SKIP_DB_BOOTSTRAP:-}" = "1" ]; then
+  echo "==> skipping database bootstrap (SKIP_DB_BOOTSTRAP=1)"
 else
-  # Which connection to migrate over.
-  #
-  # A pooled Postgres hands out two URLs and migrations need the unpooled one:
-  # `migrate deploy` takes a session-level advisory lock, which a transaction-mode
-  # pooler does not hold across statements.
-  MIGRATE_URL="${MIGRATE_DATABASE_URL:-${DATABASE_URL:-}}"
-  if [ -z "$MIGRATE_URL" ]; then
+  # Schema work needs the unpooled connection: `migrate deploy` takes a
+  # session-level advisory lock that a transaction-mode pooler will not hold
+  # across statements.
+  DB_URL="${MIGRATE_DATABASE_URL:-${DATABASE_URL:-}}"
+  if [ -z "$DB_URL" ]; then
     echo "!!! neither MIGRATE_DATABASE_URL nor DATABASE_URL is set" >&2
     exit 1
   fi
 
   # The CA, as a file.
   #
-  # Managed Postgres often presents a chain rooted in the vendor's own CA rather
+  # Managed Postgres often serves a chain rooted in the vendor's own CA rather
   # than a publicly-trusted one — Supabase serves "Supabase Root 2021 CA" — and
-  # nothing in the system trust store matches it. The app reads that root from
-  # DATABASE_CA_CERT (see lib/db.ts: an env var is the only thing a bundled
-  # serverless function can rely on), but Prisma wants a path, so it is written
-  # out here for the length of the build.
+  # nothing in the system trust store matches it. lib/db.ts reads that root from
+  # DATABASE_CA_CERT because an env var is the only thing a bundled serverless
+  # function can rely on; Prisma and node-postgres both want a path, and both
+  # read `sslrootcert` out of the connection string, so one URL serves both.
   #
-  # This was worth an hour: without it `migrate deploy` fails with P1001 "can't
-  # reach database server", which reads as a firewall or a wrong host and is
-  # really a rejected certificate.
+  # Without this the failure is disguised: `P1001: Can't reach database server`,
+  # which reads as a firewall or a wrong host and is really a rejected cert.
   if [ -n "${DATABASE_CA_CERT:-}" ]; then
     CA_FILE="$(mktemp)"
     printf '%s' "$DATABASE_CA_CERT" > "$CA_FILE"
-    # Replace any sslmode the URL already carries rather than appending a second
-    # one, and verify properly now that there is a root to verify against.
-    MIGRATE_URL="$(printf '%s' "$MIGRATE_URL" | sed 's/?.*$//')?sslmode=verify-full&sslrootcert=$CA_FILE"
-    echo "==> prisma migrate deploy (verifying against DATABASE_CA_CERT)"
+    DB_URL="$(printf '%s' "$DB_URL" | sed 's/?.*$//')?sslmode=verify-full&sslrootcert=$CA_FILE"
+    echo "==> database bootstrap (verifying against DATABASE_CA_CERT)"
   else
-    echo "==> prisma migrate deploy"
+    echo "==> database bootstrap"
   fi
 
-  DATABASE_URL="$MIGRATE_URL" bun run db:migrate
+  DATABASE_URL="$DB_URL" bun run scripts/docker-db-bootstrap.ts
 fi
 
 echo "==> next build"
