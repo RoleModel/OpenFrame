@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Geist_Mono, JetBrains_Mono } from 'next/font/google';
+import { DM_Sans, Geist_Mono } from 'next/font/google';
 import { Toaster } from 'sonner';
 import { ThemeProvider } from '@/components/theme-provider';
 import {
@@ -9,7 +9,7 @@ import {
 import { seoConfig } from '@/lib/seo';
 import './globals.css';
 
-const jetbrainsMono = JetBrains_Mono({
+const dmSans = DM_Sans({
   subsets: ['latin'],
   variable: '--font-sans',
   display: 'swap',
@@ -118,11 +118,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${jetbrainsMono.variable} ${geistMono.variable}`}
-      suppressHydrationWarning
-    >
+    <html lang="en" className={`${dmSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <body className="antialiased min-h-screen bg-background font-sans">
         {/* Not executed, only parsed by readRuntimePublicConfig(). It carries the
             public settings the browser cannot get from NEXT_PUBLIC_* variables,
