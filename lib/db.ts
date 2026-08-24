@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool, PoolConfig } from 'pg';
+import { resolveSslCa, splitConnectionString } from './db-ssl';
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -18,8 +19,12 @@ function createPool(connectionString: string): Pool {
     return globalForPool.pgPool;
   }
 
+  const ca = resolveSslCa();
   const poolConfig: PoolConfig = {
-    connectionString,
+    // With a CA configured the URL is split into fields, because pg would
+    // otherwise let the URL's sslmode overwrite the ssl option below.
+    ...(ca ? splitConnectionString(connectionString) : { connectionString }),
+    ...(ca ? { ssl: { ca, rejectUnauthorized: true } } : {}),
     max: 20, // Maximum number of connections
     idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
     connectionTimeoutMillis: 5000, // Return error after 5 seconds if can't connect
