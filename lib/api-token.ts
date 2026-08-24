@@ -36,9 +36,9 @@ import { auth } from '@/lib/auth';
  * against a session and failed against a token, which the build caught — and had
  * it not, a token-added video would have credited nobody.
  */
-export type ResolvedSession =
-	| { user: { id: string; email?: string | null; name?: string | null } }
-	| null;
+export type ResolvedSession = {
+  user: { id: string; email?: string | null; name?: string | null };
+} | null;
 
 /** A token has to be long enough that guessing it is not a strategy. */
 const MIN_TOKEN_LENGTH = 24;
@@ -69,10 +69,15 @@ function tokens(): TokenMap {
       continue;
     }
     const token = trimmed.slice(0, at).trim();
-    const email = trimmed.slice(at + 1).trim().toLowerCase();
+    const email = trimmed
+      .slice(at + 1)
+      .trim()
+      .toLowerCase();
     if (!token || !email) continue;
     if (token.length < MIN_TOKEN_LENGTH) {
-      console.warn(`OPENFRAME_API_TOKENS: ignoring a token shorter than ${MIN_TOKEN_LENGTH} characters`);
+      console.warn(
+        `OPENFRAME_API_TOKENS: ignoring a token shorter than ${MIN_TOKEN_LENGTH} characters`
+      );
       continue;
     }
     map.set(token, email);
