@@ -158,9 +158,28 @@ this instance sends.
 OPENFRAME_API_TOKENS=tok_<random>:person@example.com
 ```
 
-Comma-separate more pairs. The email must match a user on the instance. Then
+Comma-separate more pairs. The email must match a user who already exists on the
+instance — a token naming an unknown address is a 401, not anonymous access. Then
 point the Studio at the deployment instead of `http://localhost:3100` — Studio →
 Share → OpenFrame url, with this token.
+
+This is deliberately not a feature, and it has three limits worth knowing before
+you rely on it:
+
+- **A change needs a deploy.** Vercel bakes environment variables per deployment,
+  so adding or rotating a token does nothing until the next `vercel deploy --prod`.
+  A token that appears not to work is usually this.
+- **Revocation needs a deploy too.** There is no way to cut off one token quickly.
+- **It is one shared secret, readable by anyone with Vercel or repo access**, and it
+  carries a named user's authority. It does not identify who used it.
+
+That is an acceptable trade for one person and one integration, which is what this
+instance is. It stops being acceptable the moment a second person needs access, or
+a token needs revoking in a hurry. At that point the shape is a table rather than a
+variable: an `ApiToken` row per token with a public indexed prefix and a hashed
+secret, minted and revoked from the settings page, with `authFromRequest` reading
+it. `lib/admin-api-token.ts` already has the hash-and-compare pattern to copy.
+Recorded here so the next person meets a decision rather than a surprise.
 
 ### Leave unset
 
