@@ -100,6 +100,16 @@ aws s3api put-bucket-cors --bucket "$R2_BUCKET_NAME" \
   --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
 ```
 
+**List every origin the app answers on, not just the pretty one.** A Vercel
+project serves the same app on its alias _and_ on a per-deployment hostname, and
+the dashboard's own "Visit" button points at the latter. An origin missing from
+this policy fails preflight with a bare `403` before the PUT is even attempted,
+which reads as "R2 is broken" rather than as a CORS gap. Per-deployment
+hostnames are generated per build and cannot be enumerated, so the wildcard
+entry scoped to your team covers them. CORS is not the credential here — the
+presigned URL is — so it decides which page may spend a signature, not whether
+the signature is valid.
+
 For playback, give the bucket a public read origin (an R2 custom domain, or R2's
 public bucket URL) and set it as `R2_PUBLIC_BASE_URL`. The CSP in `proxy.ts` is
 built from the `R2_*` variables, so a bucket host that is not in the environment
@@ -110,6 +120,10 @@ is a bucket the browser is not allowed to talk to.
 Set these on the Vercel project (Production, and Preview if you want previews to
 work) **before the first deploy** — the build runs migrations, and the CSP is
 assembled from these values.
+
+Copy `.env.r2.example` to `.env.r2`, fill it in, and push it with
+`scripts/push-r2-env.sh` — each value goes to `vercel env add` on stdin, so no
+credential lands in shell history or an argument list.
 
 ### Required
 
