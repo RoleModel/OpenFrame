@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db';
-import { auth, checkProjectAccess } from '@/lib/auth';
+import { checkProjectAccess } from '@/lib/auth';
+import { authFromRequest } from '@/lib/api-token';
 import { rateLimit } from '@/lib/rate-limit';
 import { collectVideoMediaUrls, deleteMediaFilesBestEffort } from '@/lib/r2-cleanup';
 import { cleanupBunnyStreamVideosBestEffort } from '@/lib/bunny-stream-cleanup';
@@ -15,7 +16,7 @@ type RouteParams = { params: Promise<{ projectId: string; videoId: string }> };
 // GET /api/projects/[projectId]/videos/[videoId]
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const session = await auth();
+    const session = await authFromRequest(request);
     const { projectId, videoId } = await params;
 
     // Parse query params for pagination and options
@@ -157,7 +158,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const limited = await rateLimit(request, 'mutate');
     if (limited) return limited;
 
-    const session = await auth();
+    const session = await authFromRequest(request);
     const { projectId, videoId } = await params;
 
     if (!session?.user?.id) {
@@ -226,7 +227,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const limited = await rateLimit(request, 'mutate');
     if (limited) return limited;
 
-    const session = await auth();
+    const session = await authFromRequest(request);
     const { projectId, videoId } = await params;
 
     if (!session?.user?.id) {

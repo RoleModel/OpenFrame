@@ -27,7 +27,7 @@
 //     that validation branch stand in for the authorization branch it is supposed
 //     to be testing.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Project, User, Video, VideoVersion, Workspace } from '@prisma/client';
 import { db } from '@/lib/db';
 import {
@@ -41,7 +41,7 @@ import {
 } from '@/app/api/projects/[projectId]/videos/[videoId]/versions/[versionId]/route';
 import { POST as addVersion } from '@/app/api/projects/[projectId]/videos/[videoId]/versions/route';
 import { apiRequest, callRoute, readData } from '../helpers/request';
-import { signedInAs } from '../helpers/session';
+import { signedInAs, signedOut } from '../helpers/session';
 import {
   addProjectMember,
   addWorkspaceMember,
@@ -495,6 +495,25 @@ describe('DELETE /api/projects/[projectId]/videos/[videoId]', () => {
     expect(response.status).toBe(200);
     expect(await db.video.count({ where: { id: fixture.video.id } })).toBe(0);
     expect(await db.videoVersion.count({ where: { videoParentId: fixture.video.id } })).toBe(0);
+  });
+
+  it('lets the mapped API token remove its owner’s review video', async () => {
+    const fixture = await seedVideo();
+    const token = 'review-delete-token-for-owner-1234567890';
+    signedOut();
+    vi.stubEnv('OPENFRAME_API_TOKENS', `${token}:${fixture.owner.email}`);
+
+    const response = await callRoute(
+      deleteVideo,
+      apiRequest(videoUrl(fixture.project.id, fixture.video.id), {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${token}` },
+      }),
+      { projectId: fixture.project.id, videoId: fixture.video.id }
+    );
+
+    expect(response.status).toBe(200);
+    expect(await db.video.count({ where: { id: fixture.video.id } })).toBe(0);
   });
 
   it('lets a project ADMIN delete the video', async () => {
