@@ -1,6 +1,12 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { auth, checkProjectAccess } from '@/lib/auth';
+import { checkProjectAccess } from '@/lib/auth';
+// `authFromRequest` accepts a session OR an API token and returns the same
+// shape, so every authorisation check below is unchanged — a token acts as the
+// user it belongs to. Without it a token could create a video and then not add
+// a version to it, so every re-render became a separate video with its own
+// share link, losing the comments left on the last one.
+import { authFromRequest } from '@/lib/api-token';
 import { validateUrl, validateOptionalUrlOrAppPath } from '@/lib/validation';
 import { rateLimit } from '@/lib/rate-limit';
 import { notifyProjectOwner } from '@/lib/notifications';
@@ -15,7 +21,7 @@ type RouteParams = { params: Promise<{ projectId: string; videoId: string }> };
 // GET /api/projects/[projectId]/videos/[videoId]/versions
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const session = await auth();
+    const session = await authFromRequest(request);
     const { projectId, videoId } = await params;
 
     const video = await db.video.findFirst({
@@ -56,7 +62,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const limited = await rateLimit(request, 'create-version');
     if (limited) return limited;
 
-    const session = await auth();
+    const session = await authFromRequest(request);
     const { projectId, videoId } = await params;
 
     if (!session?.user?.id) {

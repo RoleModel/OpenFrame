@@ -1027,6 +1027,31 @@ describe('POST /api/projects/[projectId]/videos/[videoId]/versions', () => {
     expect(await db.videoVersion.count({ where: { videoParentId: fixture.video.id } })).toBe(2);
   });
 
+  // The reason this route takes a token at all: a re-render is a new version of
+  // the video already under review, not a new video. Without it the toolkit could
+  // create a video and then never add to it, so every render became a separate
+  // review with its own share link and none of the comments.
+  it('lets the mapped API token add a version to its owner’s video', async () => {
+    const fixture = await seedVideo();
+    const token = 'review-version-token-for-owner-1234567890';
+    signedOut();
+    vi.stubEnv('OPENFRAME_API_TOKENS', `${token}:${fixture.owner.email}`);
+
+    const response = await callRoute(
+      addVersion,
+      apiRequest(`${videoUrl(fixture.project.id, fixture.video.id)}/versions`, {
+        body: { videoUrl: YOUTUBE_URL, versionLabel: 'added by the toolkit', setActive: true },
+        headers: { authorization: `Bearer ${token}` },
+      }),
+      { projectId: fixture.project.id, videoId: fixture.video.id }
+    );
+
+    expect(response.status).toBe(200);
+    // On the SAME video, which is the whole point — the share link and the
+    // comments belong to the video, not to a version of it.
+    expect(await db.videoVersion.count({ where: { videoParentId: fixture.video.id } })).toBe(3);
+  });
+
   it('returns 403 to a project COMMENTATOR and writes no version', async () => {
     const fixture = await seedVideo();
     const commentator = await createUser();
